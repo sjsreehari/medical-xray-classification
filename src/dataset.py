@@ -151,7 +151,7 @@ def get_dataloaders() -> Tuple[DataLoader, DataLoader, DataLoader]:
 
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE,
                               sampler=sampler, num_workers=NUM_WORKERS,
-                              pin_memory=True)
+                              pin_memory=torch.cuda.is_available())
     val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE,
                               shuffle=False, num_workers=NUM_WORKERS)
     test_loader  = DataLoader(test_ds, batch_size=BATCH_SIZE,

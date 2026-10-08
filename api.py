@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import torch
 
-from src.config import CHECKPOINT, OUTPUT_DIR, CLASS_NAMES
+from src.config import CHECKPOINT, OUTPUT_DIR, CLASS_NAMES, get_device
 from src.model import build_model, load_checkpoint
 from src.gradcam import predict_with_gradcam, pil_to_bytes
 
@@ -42,7 +42,7 @@ app.add_middleware(
 )
 
 # ─── Global model (loaded once at startup) ────────────────────────────────────
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = get_device()
 model  = None
 
 

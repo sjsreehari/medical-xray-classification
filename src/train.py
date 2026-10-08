@@ -13,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from src.config import (
     NUM_EPOCHS, LEARNING_RATE, WEIGHT_DECAY, PATIENCE,
-    OUTPUT_DIR, LOG_DIR, CHECKPOINT, CLASS_NAMES
+    OUTPUT_DIR, LOG_DIR, CHECKPOINT, CLASS_NAMES, get_device
 )
 from src.model import save_checkpoint
 
@@ -57,7 +57,7 @@ def train(model, train_loader, val_loader):
     os.makedirs(LOG_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     logger.info(f"Training on: {device}")
     model = model.to(device)
 

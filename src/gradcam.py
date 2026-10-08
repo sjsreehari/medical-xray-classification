@@ -15,7 +15,7 @@ import torch
 import torch.nn.functional as F
 from torchvision import transforms
 
-from src.config import IMAGE_SIZE, MEAN, STD, CLASS_NAMES
+from src.config import IMAGE_SIZE, MEAN, STD, CLASS_NAMES, get_device
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def predict_with_gradcam(model, image: Image.Image, device=None):
         dict with keys: class_name, confidence, gradcam_image (PIL)
     """
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = get_device()
 
     model = model.to(device).eval()
 

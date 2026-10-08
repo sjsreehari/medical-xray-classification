@@ -13,9 +13,9 @@ import torch
 # Ensure project root is on the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.config import SEED, LOG_DIR, OUTPUT_DIR
+from src.config import SEED, LOG_DIR, OUTPUT_DIR, CHECKPOINT, get_device
 from src.dataset import download_kaggle_dataset, get_dataloaders
-from src.model import build_model
+from src.model import build_model, load_checkpoint
 from src.train import train
 from src.evaluate import full_evaluation
 
@@ -40,8 +40,7 @@ def main():
     logger.info("  Chest X-Ray Disease Detection — Training Pipeline")
     logger.info("=" * 60)
     logger.info(f"PyTorch  : {torch.__version__}")
-    logger.info(f"CUDA     : {torch.cuda.is_available()} "
-                f"({'GPU: ' + torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'})")
+    logger.info(f"Device   : {get_device()}")
 
     # ── 1. Dataset ────────────────────────────────────────────────────────────
     logger.info("\n[1/3] Preparing dataset…")
@@ -55,8 +54,6 @@ def main():
 
     # ── 3. Evaluate ───────────────────────────────────────────────────────────
     logger.info("\n[3/3] Evaluating on test set…")
-    from src.model import build_model, load_checkpoint
-    from src.config import CHECKPOINT
     test_model = build_model(pretrained=False)
     test_model = load_checkpoint(test_model, CHECKPOINT)
     metrics    = full_evaluation(test_model, test_loader, history)

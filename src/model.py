@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 
-from src.config import NUM_CLASSES, CHECKPOINT
+from src.config import NUM_CLASSES, CHECKPOINT, get_device
 
 
 def build_model(pretrained: bool = True, freeze_backbone: bool = False) -> nn.Module:
@@ -40,7 +40,7 @@ def load_checkpoint(model: nn.Module, path: str = CHECKPOINT,
                     device: torch.device = None) -> nn.Module:
     """Load model weights from checkpoint."""
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = get_device()
     checkpoint = torch.load(path, map_location=device, weights_only=False)
     state = checkpoint.get("model_state_dict", checkpoint)
     model.load_state_dict(state)

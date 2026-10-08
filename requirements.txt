@@ -1,0 +1,14 @@
+torch
+torchvision
+numpy
+pillow
+opencv-python-headless
+matplotlib
+seaborn
+scikit-learn
+fastapi
+uvicorn[standard]
+python-multipart
+streamlit
+requests
+tensorboard

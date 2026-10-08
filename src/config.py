@@ -6,9 +6,18 @@ import os
 # ─── Paths ───────────────────────────────────────────────────────────────────
 BASE_DIR      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR      = os.path.join(BASE_DIR, "data")
-TRAIN_DIR     = os.path.join(DATA_DIR, "train")
-VAL_DIR       = os.path.join(DATA_DIR, "val")
-TEST_DIR      = os.path.join(DATA_DIR, "test")
+
+# Check if data is nested inside data/chest_xray
+_nested_dir = os.path.join(DATA_DIR, "chest_xray")
+if os.path.exists(os.path.join(_nested_dir, "train")):
+    TRAIN_DIR = os.path.join(_nested_dir, "train")
+    VAL_DIR   = os.path.join(_nested_dir, "val")
+    TEST_DIR  = os.path.join(_nested_dir, "test")
+else:
+    TRAIN_DIR = os.path.join(DATA_DIR, "train")
+    VAL_DIR   = os.path.join(DATA_DIR, "val")
+    TEST_DIR  = os.path.join(DATA_DIR, "test")
+
 MODEL_DIR     = os.path.join(BASE_DIR, "models")
 OUTPUT_DIR    = os.path.join(BASE_DIR, "outputs")
 LOG_DIR       = os.path.join(BASE_DIR, "logs")
@@ -18,10 +27,10 @@ CHECKPOINT    = os.path.join(MODEL_DIR, "best_model.pth")
 IMAGE_SIZE    = 224
 BATCH_SIZE    = 32
 NUM_WORKERS   = 0          # 0 for Windows compatibility
-NUM_EPOCHS    = 15
+NUM_EPOCHS    = 8
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY  = 1e-4
-PATIENCE      = 5          # Early stopping patience
+PATIENCE      = 4          # Early stopping patience
 NUM_CLASSES   = 2
 CLASS_NAMES   = ["NORMAL", "PNEUMONIA"]
 
@@ -35,3 +44,12 @@ API_PORT = 8000
 
 # ─── Misc ─────────────────────────────────────────────────────────────────────
 SEED = 42
+
+
+def get_device():
+    import torch
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")

@@ -17,7 +17,7 @@ from sklearn.metrics import (
     roc_curve, precision_recall_curve, classification_report
 )
 
-from src.config import OUTPUT_DIR, CLASS_NAMES
+from src.config import OUTPUT_DIR, CLASS_NAMES, get_device
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 def evaluate(model, test_loader, device=None):
     """Run inference on test_loader and return all predictions."""
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = get_device()
 
     model.eval().to(device)
     all_labels, all_preds, all_probs = [], [], []
@@ -153,7 +153,7 @@ def plot_training_history(history, save_dir=OUTPUT_DIR):
 def full_evaluation(model, test_loader, history=None):
     """Run complete evaluation and save all plots/metrics."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
 
     y_true, y_pred, y_prob = evaluate(model, test_loader, device)
     metrics = compute_metrics(y_true, y_pred, y_prob)
