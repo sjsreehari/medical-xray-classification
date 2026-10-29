@@ -1438,3 +1438,306 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ─── PACS RADIOLOGY TOOLBAR & FILTERS ──────────────────────── */
+.pacs-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FAFCFF;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pacs-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pacs-btn {
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.pacs-btn:hover {
+  background: var(--blue-subtle);
+  color: var(--primary-blue);
+  border-color: var(--border-hover);
+}
+
+.pacs-btn.active {
+  background: var(--primary-blue);
+  color: #FFFFFF;
+  border-color: var(--primary-blue);
+  font-weight: 600;
+}
+
+/* ─── INTERACTIVE CURTAIN SPLIT SLIDER ──────────────────────── */
+.curtain-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #080C14;
+  border-radius: 12px;
+  overflow: hidden;
+  user-select: none;
+  cursor: ew-resize;
+  border: 1px solid var(--border-color);
+}
+
+.curtain-img-base {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.curtain-overlay-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.curtain-img-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.curtain-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #FFFFFF;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.curtain-handle-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  color: var(--primary-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.curtain-label-left {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  background: rgba(16, 38, 79, 0.75);
+  backdrop-filter: blur(4px);
+  color: #FFFFFF;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.curtain-label-right {
+  position: absolute;
+  bottom: 10px;
+  right: 12px;
+  background: rgba(57, 133, 255, 0.85);
+  backdrop-filter: blur(4px);
+  color: #FFFFFF;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* ─── NORMAL BASELINE COMPARISON ────────────────────────────── */
+.baseline-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.baseline-box {
+  background: #080C14;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  aspect-ratio: 1 / 1;
+}
+
+.baseline-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.baseline-badge-tag {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+/* ─── BATCH TRIAGE MODE ─────────────────────────────────────── */
+.batch-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.batch-stat-box {
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-inner);
+  padding: 14px 16px;
+  text-align: left;
+  box-shadow: var(--shadow-sm);
+}
+
+.batch-stat-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-title);
+  letter-spacing: -0.02em;
+}
+
+.batch-stat-lbl {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.stat-badge.stat-urgent {
+  background: #FFE4E8;
+  color: #D12E48;
+  border: 1px solid #FFCCD5;
+}
+
+.stat-badge.stat-routine {
+  background: #DCFCE7;
+  color: #15803D;
+  border: 1px solid #BBF7D0;
+}
+
+/* ─── PEDIATRIC VITALS & QA CHECK ───────────────────────────── */
+.vitals-box {
+  background: #FAFCFF;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-inner);
+  padding: 14px;
+  margin-top: 16px;
+}
+
+.vitals-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-title);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vitals-table {
+  width: 100%;
+  font-size: 11.5px;
+  border-collapse: collapse;
+}
+
+.vitals-table td {
+  padding: 4px 2px;
+}
+
+.vitals-table td:first-child {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.vitals-table td:last-child {
+  color: var(--text-title);
+  font-weight: 600;
+  text-align: right;
+}
+
+.qa-strip {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #EDF3FC;
+}
+
+.qa-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-title);
+}
+
+/* ─── FHIR CODE BOX ─────────────────────────────────────────── */
+.fhir-code-box {
+  background: #0A0F1D;
+  color: #93C5FD;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  overflow-x: auto;
+  max-height: 380px;
+  line-height: 1.5;
+  border: 1px solid #1E293B;
+}
+

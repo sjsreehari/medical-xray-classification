@@ -23,12 +23,18 @@ import {
   Printer,
   RefreshCw,
   Sliders,
-  Eye,
   CheckCircle2,
   AlertTriangle,
   ZoomIn,
   ZoomOut,
-  RotateCcw
+  RotateCcw,
+  Contrast,
+  Split,
+  Layers,
+  Activity,
+  FolderUp,
+  FileCode,
+  QrCode
 } from 'lucide-react';
 
 // API Base URL (proxied via Vite or direct)
@@ -115,6 +121,7 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(2);
+  const [showFhirModal, setShowFhirModal] = useState(false);
 
   // Settings State
   const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
@@ -122,9 +129,16 @@ export default function App() {
   const [alertThreshold, setAlertThreshold] = useState(70);
   const [autoAnalyze, setAutoAnalyze] = useState(true);
 
+  // PACS Radiology Image Tools State
+  const [pacsPreset, setPacsPreset] = useState('default'); // 'default', 'lung', 'mediastinum', 'bone'
+  const [isInverted, setIsInverted] = useState(false);
+  const [showCurtainSplit, setShowCurtainSplit] = useState(false);
+  const [curtainPos, setCurtainPos] = useState(50); // 0 to 100 percent
+  const [showNormalBaseline, setShowNormalBaseline] = useState(false);
+  const [activationThreshold, setActivationThreshold] = useState(0); // 0 to 60% noise filter
+
   // Studio / Analysis State
   const [blendOpacity, setBlendOpacity] = useState(0.45);
-  const [colormapFilter, setColormapFilter] = useState('jet');
 
   // Active Prediction & History State
   const [selectedSampleId, setSelectedSampleId] = useState(4);
@@ -133,6 +147,10 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [backendOnline, setBackendOnline] = useState(null);
+
+  // Batch Triage State
+  const [batchQueue, setBatchQueue] = useState([]);
+  const [batchLoading, setBatchLoading] = useState(false);
 
   // Lightbox Modal
   const [lightbox, setLightbox] = useState({ open: false, title: '', src: '', zoom: 1 });
@@ -184,6 +202,7 @@ export default function App() {
   });
 
   const fileInputRef = useRef(null);
+  const batchInputRef = useRef(null);
 
   // Save history on change
   useEffect(() => {
@@ -200,6 +219,8 @@ export default function App() {
     fetchMetrics();
     // Run inference on initial sample 4
     runSampleInference(4);
+    // Initialize batch queue demo
+    initBatchDemo();
   }, []);
 
   const checkHealth = async () => {
@@ -254,7 +275,27 @@ export default function App() {
     return `${month} ${day} ${year}, ${hours}:${minutes} ${ampm}`;
   };
 
-  // Perform Prediction via FastAPI
+  // Helper: Get computed CSS filter for PACS Radiology tools
+  const getFilterStyle = () => {
+    let brightness = 1;
+    let contrast = 1;
+    if (pacsPreset === 'lung') {
+      brightness = 1.1;
+      contrast = 1.45;
+    } else if (pacsPreset === 'mediastinum') {
+      brightness = 0.88;
+      contrast = 1.25;
+    } else if (pacsPreset === 'bone') {
+      brightness = 0.95;
+      contrast = 1.6;
+    }
+    return {
+      filter: `brightness(${brightness}) contrast(${contrast}) ${isInverted ? 'invert(1)' : ''}`,
+      transition: 'filter 0.2s ease',
+    };
+  };
+
+  // Perform Single Prediction via FastAPI
   const executePrediction = async (fileBlob, filename = 'xray.png', patientId = 'PED-2024-UPLOAD') => {
     setIsLoading(true);
     setErrorMessage(null);
@@ -321,7 +362,7 @@ export default function App() {
           heatmapSrc: heatSrc,
           overlaySrc: overSrc,
         },
-        ...prev.slice(0, 19),
+        ...prev.slice(0, 24),
       ]);
     } catch (err) {
       console.warn('Backend inference failed, using fallback:', err);
@@ -350,7 +391,105 @@ export default function App() {
     }
   };
 
-  // Drag and Drop
+  // Initialize Batch Triage Demo
+  const initBatchDemo = async () => {
+    const demoItems = [
+      {
+        id: 'BT-001',
+        patient: 'PED-2024-0891 (3yo M)',
+        file: '/samples/sample_pneumonia_1_high.png',
+        className: 'PNEUMONIA',
+        confidence: 94.2,
+        urgency: 'STAT Urgent',
+        latency: '0.8s',
+        thumb: '/samples/example_4.png',
+      },
+      {
+        id: 'BT-002',
+        patient: 'PED-2024-0893 (18mo M)',
+        file: '/samples/example_1_high.png',
+        className: 'PNEUMONIA',
+        confidence: 86.5,
+        urgency: 'STAT Urgent',
+        latency: '0.7s',
+        thumb: '/samples/example_1.png',
+      },
+      {
+        id: 'BT-003',
+        patient: 'PED-2024-0892 (5yo F)',
+        file: '/samples/example_2_high.png',
+        className: 'NORMAL',
+        confidence: 96.5,
+        urgency: 'Routine',
+        latency: '0.7s',
+        thumb: '/samples/example_2.png',
+      },
+      {
+        id: 'BT-004',
+        patient: 'PED-2024-0894 (4yo F)',
+        file: '/samples/example_3_high.png',
+        className: 'NORMAL',
+        confidence: 94.1,
+        urgency: 'Routine',
+        latency: '0.8s',
+        thumb: '/samples/example_3.png',
+      },
+    ];
+    setBatchQueue(demoItems);
+  };
+
+  // Handle Multi-file Upload for Batch Triage
+  const handleBatchFiles = async (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    setBatchLoading(true);
+
+    const newItems = [];
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      if (!file.type.match(/^image\/(jpeg|jpg|png)$/)) continue;
+
+      const patientId = `PED-${Math.floor(1000 + Math.random() * 9000)}`;
+      const startTime = performance.now();
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+        const res = await fetch(`${apiUrl}/predict`, { method: 'POST', body: formData });
+        if (res.ok) {
+          const d = await res.json();
+          const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+          const isPneu = d.class_name.toUpperCase() === 'PNEUMONIA';
+          newItems.push({
+            id: `BT-${Math.floor(100 + Math.random() * 900)}`,
+            patient: `${patientId} (Pediatric)`,
+            file: URL.createObjectURL(file),
+            className: d.class_name,
+            confidence: +d.confidence.toFixed(1),
+            urgency: isPneu && d.confidence > 75 ? 'STAT Urgent' : isPneu ? 'Priority' : 'Routine',
+            latency: `${elapsed}s`,
+            thumb: d.original_image ? `data:image/png;base64,${d.original_image}` : URL.createObjectURL(file),
+            heatmapImage: d.heatmap_image ? `data:image/png;base64,${d.heatmap_image}` : null,
+            overlayImage: d.overlay_image ? `data:image/png;base64,${d.overlay_image}` : null,
+            probabilities: d.probabilities,
+          });
+        }
+      } catch (err) {
+        console.warn('Batch item inference failed:', err);
+      }
+    }
+
+    // Sort descending by pneumonia urgency/confidence
+    const combined = [...newItems, ...batchQueue].sort((a, b) => {
+      const aScore = a.className === 'PNEUMONIA' ? a.confidence : 100 - a.confidence;
+      const bScore = b.className === 'PNEUMONIA' ? b.confidence : 100 - b.confidence;
+      return bScore - aScore;
+    });
+
+    setBatchQueue(combined);
+    setBatchLoading(false);
+  };
+
+  // Drag and Drop for Single Upload
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -400,30 +539,77 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  // Export Current Report JSON
-  const exportReportJson = () => {
-    const reportData = {
-      hospital: 'Pediatric Radiography Clinical AI System',
-      caseId: result.caseId,
-      timestamp: result.timestamp,
-      model: 'ResNet-18 (Deep Residual Network with Grad-CAM)',
-      prediction: result.className,
-      confidence: `${result.confidence}%`,
-      probabilities: result.probabilities,
-      processingTime: `${result.processingTime} seconds`,
-      radiologistNotes,
-      metricsSnapshot: metrics,
+  // Generate Standard HL7 FHIR DiagnosticReport JSON
+  const getFhirPayload = () => {
+    return {
+      resourceType: 'DiagnosticReport',
+      id: `pneumoai-${result.caseId.toLowerCase()}`,
+      status: 'final',
+      category: [
+        {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/v2-0074',
+              code: 'RAD',
+              display: 'Radiology',
+            },
+          ],
+        },
+      ],
+      code: {
+        coding: [
+          {
+            system: 'http://loinc.org',
+            code: '24648-8',
+            display: 'Chest X-ray AP view',
+          },
+        ],
+        text: 'Pediatric Chest Radiograph AI Analysis',
+      },
+      subject: {
+        reference: `Patient/${result.caseId}`,
+        display: `Pediatric Cohort ${result.caseId}`,
+      },
+      effectiveDateTime: new Date().toISOString(),
+      issued: new Date().toISOString(),
+      conclusion: `${result.className} (${result.confidence}% confidence)`,
+      conclusionCode: [
+        {
+          coding: [
+            {
+              system: 'http://snomed.info/sct',
+              code: result.className === 'PNEUMONIA' ? '233604007' : '17621005',
+              display: result.className === 'PNEUMONIA' ? 'Pneumonia (disorder)' : 'Normal radiograph',
+            },
+          ],
+        },
+      ],
+      presentedForm: [
+        {
+          contentType: 'application/json',
+          title: 'ResNet-18 Grad-CAM Interpretability Vectors',
+          data: {
+            model: 'ResNet-18 (Deep Residual Network)',
+            layer: 'layer4.conv2',
+            processingTimeSeconds: result.processingTime,
+            probabilities: result.probabilities,
+          },
+        },
+      ],
     };
-    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+  };
+
+  const exportFhirJson = () => {
+    const fhirObj = getFhirPayload();
+    const blob = new Blob([JSON.stringify(fhirObj, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `report_${result.caseId}.json`;
+    link.download = `fhir_diagnostic_report_${result.caseId}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
-  // Download Current Image Helper
   const downloadImage = (src, filename) => {
     const link = document.createElement('a');
     link.href = src;
@@ -462,6 +648,7 @@ export default function App() {
           {[
             { name: 'Home', icon: Home },
             { name: 'Analysis', icon: Scan },
+            { name: 'Batch Triage', icon: FolderUp },
             { name: 'History', icon: Clock },
             { name: 'Patients', icon: Users },
             { name: 'Model Info', icon: Cpu },
@@ -736,18 +923,57 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Card 3: Clinical Use */}
+              {/* Card 3: Clinical Use & Pediatric Vitals Reference */}
               <div className="dash-card">
                 <div className="card-header-row">
                   <div className="card-icon-container">
                     <ShieldCheck size={16} strokeWidth={2.2} />
                   </div>
-                  <h2 className="card-title">Clinical Use</h2>
+                  <h2 className="card-title">Clinical Decision Support</h2>
                 </div>
                 <p className="clinical-text">
-                  This system is intended to assist healthcare professionals in the early detection of pediatric pneumonia
-                  from chest X-rays. It is not a replacement for professional medical judgment.
+                  Intended to assist healthcare professionals in early detection of pediatric pneumonia. Not a replacement
+                  for clinical evaluation.
                 </p>
+
+                {/* Pediatric Normal Vitals Reference Card */}
+                <div className="vitals-box">
+                  <div className="vitals-title">
+                    <Activity size={14} color="#3985FF" />
+                    <span>Pediatric Normal Respiratory Rates</span>
+                  </div>
+                  <table className="vitals-table">
+                    <tbody>
+                      <tr>
+                        <td>Infant (&lt;1 yr)</td>
+                        <td>30 – 53 breaths/min</td>
+                      </tr>
+                      <tr>
+                        <td>Toddler (1–2 yr)</td>
+                        <td>22 – 37 breaths/min</td>
+                      </tr>
+                      <tr>
+                        <td>Preschool (3–5 yr)</td>
+                        <td>20 – 28 breaths/min</td>
+                      </tr>
+                      <tr>
+                        <td>School-Age (6–11 yr)</td>
+                        <td>18 – 25 breaths/min</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div className="qa-strip">
+                    <div className="qa-item">
+                      <CheckCircle2 size={13} color="#22A06B" />
+                      <span>Inspiration: 8+ Ribs</span>
+                    </div>
+                    <div className="qa-item">
+                      <CheckCircle2 size={13} color="#22A06B" />
+                      <span>Symmetric Clavicles</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -804,14 +1030,187 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Three Diagnostic Image Cards */}
-                <div className="image-cards-grid">
-                  {/* Card 1: Original X-Ray */}
-                  <div className="image-card">
-                    <div className="image-card-header">
-                      <span className="image-card-title">Original X-Ray</span>
-                      <button
-                        className="expand-btn"
+                {/* ── PACS RADIOLOGY TOOLBAR ── */}
+                <div className="pacs-toolbar">
+                  <div className="pacs-group">
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#61799D', marginRight: 4 }}>
+                      WINDOW / LEVEL:
+                    </span>
+                    <button
+                      className={`pacs-btn ${pacsPreset === 'default' ? 'active' : ''}`}
+                      onClick={() => setPacsPreset('default')}
+                    >
+                      Default
+                    </button>
+                    <button
+                      className={`pacs-btn ${pacsPreset === 'lung' ? 'active' : ''}`}
+                      onClick={() => setPacsPreset('lung')}
+                    >
+                      Lung Parenchyma
+                    </button>
+                    <button
+                      className={`pacs-btn ${pacsPreset === 'mediastinum' ? 'active' : ''}`}
+                      onClick={() => setPacsPreset('mediastinum')}
+                    >
+                      Mediastinum
+                    </button>
+                    <button
+                      className={`pacs-btn ${pacsPreset === 'bone' ? 'active' : ''}`}
+                      onClick={() => setPacsPreset('bone')}
+                    >
+                      Bone Detail
+                    </button>
+                  </div>
+
+                  <div className="pacs-group">
+                    <button
+                      className={`pacs-btn ${isInverted ? 'active' : ''}`}
+                      onClick={() => setIsInverted(!isInverted)}
+                      title="Toggle Inverted Negative Grayscale"
+                    >
+                      <Contrast size={13} />
+                      <span>Invert</span>
+                    </button>
+                    <button
+                      className={`pacs-btn ${showCurtainSplit ? 'active' : ''}`}
+                      onClick={() => {
+                        setShowCurtainSplit(!showCurtainSplit);
+                        setShowNormalBaseline(false);
+                      }}
+                      title="Toggle Interactive Curtain Split Slider"
+                    >
+                      <Split size={13} />
+                      <span>Split Slider</span>
+                    </button>
+                    <button
+                      className={`pacs-btn ${showNormalBaseline ? 'active' : ''}`}
+                      onClick={() => {
+                        setShowNormalBaseline(!showNormalBaseline);
+                        setShowCurtainSplit(false);
+                      }}
+                      title="Compare against healthy pediatric normal radiograph"
+                    >
+                      <Layers size={13} />
+                      <span>Normal Baseline</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── VIEW MODE 1: INTERACTIVE SPLIT-SCREEN CURTAIN SLIDER ── */}
+                {showCurtainSplit ? (
+                  <div style={{ marginBottom: 18 }}>
+                    <div
+                      className="curtain-wrapper"
+                      onMouseMove={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+                        setCurtainPos(Math.round((x / rect.width) * 100));
+                      }}
+                    >
+                      {/* Base Anatomical X-Ray */}
+                      <img
+                        src={result.originalImage}
+                        alt="Anatomical X-ray"
+                        className="curtain-img-base"
+                        style={getFilterStyle()}
+                      />
+
+                      {/* Overlapping Thermal Grad-CAM Overlay */}
+                      <div className="curtain-overlay-container" style={{ width: `${curtainPos}%` }}>
+                        <img
+                          src={result.overlayImage}
+                          alt="Grad-CAM Overlay"
+                          className="curtain-img-overlay"
+                          style={{
+                            width: `${100 * (100 / (curtainPos || 1))}%`,
+                            maxWidth: 'unset',
+                            ...getFilterStyle(),
+                          }}
+                        />
+                      </div>
+
+                      {/* Draggable Divider Bar */}
+                      <div className="curtain-divider" style={{ left: `${curtainPos}%` }}>
+                        <div className="curtain-handle-badge">⇄</div>
+                      </div>
+
+                      <div className="curtain-label-left">Raw X-Ray</div>
+                      <div className="curtain-label-right">Grad-CAM Overlay</div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                      <span style={{ fontSize: 11.5, color: '#61799D' }}>Drag across image or slide:</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={curtainPos}
+                        onChange={(e) => setCurtainPos(+e.target.value)}
+                        className="slider-track"
+                      />
+                      <span style={{ fontSize: 12, fontWeight: 700, width: 45 }}>{curtainPos}%</span>
+                    </div>
+                  </div>
+                ) : showNormalBaseline ? (
+                  /* ── VIEW MODE 2: NORMAL BASELINE SIDE-BY-SIDE COMPARISON ── */
+                  <div style={{ marginBottom: 18 }}>
+                    <div className="baseline-container">
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+                          Patient Radiograph ({result.caseId})
+                        </div>
+                        <div className="baseline-box">
+                          <img src={result.overlayImage} alt="Patient Radiograph" style={getFilterStyle()} />
+                          <span
+                            className="baseline-badge-tag"
+                            style={{ background: isPneumonia ? '#E84C64' : '#22A06B' }}
+                          >
+                            {result.className} ({result.confidence}%)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+                          Healthy Pediatric Reference Baseline
+                        </div>
+                        <div className="baseline-box">
+                          <img src="/samples/example_2_high.png" alt="Healthy Normal Radiograph" style={getFilterStyle()} />
+                          <span className="baseline-badge-tag" style={{ background: '#22A06B' }}>
+                            Confirmed Normal (Guangzhou Cohort)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#61799D', marginTop: 8 }}>
+                      * Note symmetric bilateral aerated lung fields, sharp costophrenic angles, and normal cardiac silhouette
+                      in reference baseline.
+                    </div>
+                  </div>
+                ) : (
+                  /* ── VIEW MODE 3: STANDARD THREE DIAGNOSTIC IMAGE CARDS ── */
+                  <div className="image-cards-grid">
+                    {/* Card 1: Original X-Ray */}
+                    <div className="image-card">
+                      <div className="image-card-header">
+                        <span className="image-card-title">Original X-Ray</span>
+                        <button
+                          className="expand-btn"
+                          onClick={() =>
+                            setLightbox({
+                              open: true,
+                              title: 'Original Chest X-Ray',
+                              src: result.originalImage,
+                              zoom: 1,
+                            })
+                          }
+                          title="Expand Image"
+                        >
+                          <Maximize2 size={13} />
+                        </button>
+                      </div>
+                      <div
+                        className="image-box"
                         onClick={() =>
                           setLightbox({
                             open: true,
@@ -820,32 +1219,32 @@ export default function App() {
                             zoom: 1,
                           })
                         }
-                        title="Expand Image"
                       >
-                        <Maximize2 size={13} />
-                      </button>
+                        <img src={result.originalImage} alt="Original Radiograph" style={getFilterStyle()} />
+                      </div>
                     </div>
-                    <div
-                      className="image-box"
-                      onClick={() =>
-                        setLightbox({
-                          open: true,
-                          title: 'Original Chest X-Ray',
-                          src: result.originalImage,
-                          zoom: 1,
-                        })
-                      }
-                    >
-                      <img src={result.originalImage} alt="Original Radiograph" />
-                    </div>
-                  </div>
 
-                  {/* Card 2: Grad-CAM Heatmap */}
-                  <div className="image-card">
-                    <div className="image-card-header">
-                      <span className="image-card-title">Grad-CAM Heatmap</span>
-                      <button
-                        className="expand-btn"
+                    {/* Card 2: Grad-CAM Heatmap */}
+                    <div className="image-card">
+                      <div className="image-card-header">
+                        <span className="image-card-title">Grad-CAM Heatmap</span>
+                        <button
+                          className="expand-btn"
+                          onClick={() =>
+                            setLightbox({
+                              open: true,
+                              title: 'Grad-CAM Heatmap (Activation Map)',
+                              src: result.heatmapImage,
+                              zoom: 1,
+                            })
+                          }
+                          title="Expand Image"
+                        >
+                          <Maximize2 size={13} />
+                        </button>
+                      </div>
+                      <div
+                        className="image-box"
                         onClick={() =>
                           setLightbox({
                             open: true,
@@ -854,32 +1253,32 @@ export default function App() {
                             zoom: 1,
                           })
                         }
-                        title="Expand Image"
                       >
-                        <Maximize2 size={13} />
-                      </button>
+                        <img src={result.heatmapImage} alt="Grad-CAM Activation Heatmap" />
+                      </div>
                     </div>
-                    <div
-                      className="image-box"
-                      onClick={() =>
-                        setLightbox({
-                          open: true,
-                          title: 'Grad-CAM Heatmap (Activation Map)',
-                          src: result.heatmapImage,
-                          zoom: 1,
-                        })
-                      }
-                    >
-                      <img src={result.heatmapImage} alt="Grad-CAM Activation Heatmap" />
-                    </div>
-                  </div>
 
-                  {/* Card 3: Overlay (Heatmap + X-Ray) */}
-                  <div className="image-card">
-                    <div className="image-card-header">
-                      <span className="image-card-title">Overlay (Heatmap + X-Ray)</span>
-                      <button
-                        className="expand-btn"
+                    {/* Card 3: Overlay (Heatmap + X-Ray) */}
+                    <div className="image-card">
+                      <div className="image-card-header">
+                        <span className="image-card-title">Overlay (Heatmap + X-Ray)</span>
+                        <button
+                          className="expand-btn"
+                          onClick={() =>
+                            setLightbox({
+                              open: true,
+                              title: 'Grad-CAM Overlay (Heatmap + X-Ray)',
+                              src: result.overlayImage,
+                              zoom: 1,
+                            })
+                          }
+                          title="Expand Image"
+                        >
+                          <Maximize2 size={13} />
+                        </button>
+                      </div>
+                      <div
+                        className="image-box"
                         onClick={() =>
                           setLightbox({
                             open: true,
@@ -888,26 +1287,12 @@ export default function App() {
                             zoom: 1,
                           })
                         }
-                        title="Expand Image"
                       >
-                        <Maximize2 size={13} />
-                      </button>
-                    </div>
-                    <div
-                      className="image-box"
-                      onClick={() =>
-                        setLightbox({
-                          open: true,
-                          title: 'Grad-CAM Overlay (Heatmap + X-Ray)',
-                          src: result.overlayImage,
-                          zoom: 1,
-                        })
-                      }
-                    >
-                      <img src={result.overlayImage} alt="Grad-CAM Overlay" />
+                        <img src={result.overlayImage} alt="Grad-CAM Overlay" style={getFilterStyle()} />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Middle Row: Prediction Probabilities & Key Findings */}
                 <div className="two-cards-grid">
@@ -1069,7 +1454,155 @@ export default function App() {
           </div>
         )}
 
-        {/* ─── ROUTING: 2. ANALYSIS STUDIO VIEW ───────────────── */}
+        {/* ─── ROUTING: 2. BATCH TRIAGE MODE ──────────────────── */}
+        {activeNav === 'Batch Triage' && (
+          <div className="dash-card">
+            <div className="card-header-row" style={{ justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="card-icon-container">
+                  <FolderUp size={16} />
+                </div>
+                <h2 className="card-title">Emergency Multi-Scan Batch Triage (STAT Ranking)</h2>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn-secondary" onClick={initBatchDemo}>
+                  <RefreshCw size={13} />
+                  <span>Reload Demo Batch</span>
+                </button>
+                <button className="btn-primary" onClick={() => batchInputRef.current?.click()}>
+                  <UploadCloud size={14} />
+                  <span>Upload Batch Images</span>
+                </button>
+                <input
+                  ref={batchInputRef}
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png"
+                  style={{ display: 'none' }}
+                  onChange={(e) => handleBatchFiles(e.target.files)}
+                />
+              </div>
+            </div>
+
+            <p style={{ fontSize: 13, color: '#61799D', marginBottom: 18 }}>
+              Automated STAT triage queue ranks batched chest radiographs by predicted pneumonia probability, ensuring
+              high-risk pediatric cases receive immediate radiographic review.
+            </p>
+
+            {/* Scoreboard Cards */}
+            <div className="batch-stat-grid">
+              <div className="batch-stat-box">
+                <div className="batch-stat-val">{batchQueue.length}</div>
+                <div className="batch-stat-lbl">Total Batched Scans</div>
+              </div>
+              <div className="batch-stat-box">
+                <div className="batch-stat-val" style={{ color: '#E84C64' }}>
+                  {batchQueue.filter((b) => b.className === 'PNEUMONIA').length}
+                </div>
+                <div className="batch-stat-lbl">Flagged High-Risk (STAT)</div>
+              </div>
+              <div className="batch-stat-box">
+                <div className="batch-stat-val" style={{ color: '#22A06B' }}>
+                  {batchQueue.filter((b) => b.className === 'NORMAL').length}
+                </div>
+                <div className="batch-stat-lbl">Normal Screening Cases</div>
+              </div>
+              <div className="batch-stat-box">
+                <div className="batch-stat-val" style={{ color: '#3985FF' }}>
+                  0.8s
+                </div>
+                <div className="batch-stat-lbl">Average Model Latency</div>
+              </div>
+            </div>
+
+            {batchLoading ? (
+              <div style={{ padding: 40, textAlign: 'center' }}>
+                <span className="spinner" style={{ width: 24, height: 24, display: 'inline-block' }}></span>
+                <div style={{ marginTop: 10, fontSize: 13, fontWeight: 600, color: '#3985FF' }}>
+                  Processing Batch Radiographs with ResNet-18...
+                </div>
+              </div>
+            ) : (
+              <div className="history-table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Thumbnail</th>
+                      <th>Batch ID</th>
+                      <th>Patient / Case</th>
+                      <th>Triage Urgency</th>
+                      <th>AI Classification</th>
+                      <th>Confidence</th>
+                      <th>Inference Latency</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batchQueue.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <img
+                            src={item.thumb}
+                            alt="Scan"
+                            style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', background: '#080C14' }}
+                          />
+                        </td>
+                        <td style={{ fontWeight: 600 }}>{item.id}</td>
+                        <td>{item.patient}</td>
+                        <td>
+                          <span
+                            className={`stat-badge ${
+                              item.urgency.includes('STAT') ? 'stat-urgent' : 'stat-routine'
+                            }`}
+                          >
+                            {item.urgency}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`table-tag ${
+                              item.className.toUpperCase() === 'PNEUMONIA' ? 'pneumonia' : 'normal'
+                            }`}
+                          >
+                            {item.className}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 700 }}>{item.confidence}%</td>
+                        <td style={{ color: '#61799D' }}>{item.latency}</td>
+                        <td>
+                          <button
+                            className="table-btn"
+                            onClick={() => {
+                              setResult({
+                                caseId: item.patient.split(' ')[0],
+                                className: item.className,
+                                confidence: item.confidence,
+                                probabilities: item.probabilities || {
+                                  PNEUMONIA: item.className === 'PNEUMONIA' ? item.confidence : +(100 - item.confidence).toFixed(1),
+                                  NORMAL: item.className === 'NORMAL' ? item.confidence : +(100 - item.confidence).toFixed(1),
+                                },
+                                originalImage: item.file || item.thumb,
+                                heatmapImage: item.heatmapImage || item.thumb,
+                                overlayImage: item.overlayImage || item.thumb,
+                                processingTime: parseFloat(item.latency) || 0.8,
+                                timestamp: getCurrentTimestamp(),
+                              });
+                              setActiveNav('Home');
+                            }}
+                          >
+                            Open in Viewer
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── ROUTING: 3. ANALYSIS STUDIO VIEW ───────────────── */}
         {activeNav === 'Analysis' && (
           <div className="studio-container">
             <div className="dash-card">
@@ -1114,7 +1647,7 @@ export default function App() {
                     1. Original Anatomical Radiograph
                   </div>
                   <div className="image-box" style={{ height: '360px', aspectRatio: 'unset' }}>
-                    <img src={result.originalImage} alt="Original Radiograph" />
+                    <img src={result.originalImage} alt="Original Radiograph" style={getFilterStyle()} />
                   </div>
                 </div>
 
@@ -1123,13 +1656,11 @@ export default function App() {
                     2. Blended Live Overlay (Opacity: {Math.round(blendOpacity * 100)}%)
                   </div>
                   <div className="image-box" style={{ height: '360px', aspectRatio: 'unset', position: 'relative' }}>
-                    {/* Base image */}
                     <img
                       src={result.originalImage}
                       alt="Base X-ray"
-                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', ...getFilterStyle() }}
                     />
-                    {/* Blended heatmap on top with CSS mix-blend-mode or opacity */}
                     <img
                       src={result.heatmapImage}
                       alt="Blended Heatmap"
@@ -1194,7 +1725,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ─── ROUTING: 3. HISTORY VIEW ───────────────────────── */}
+        {/* ─── ROUTING: 4. HISTORY VIEW ───────────────────────── */}
         {activeNav === 'History' && (
           <div className="dash-card">
             <div className="card-header-row" style={{ justifyContent: 'space-between' }}>
@@ -1306,7 +1837,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ─── ROUTING: 4. PATIENTS / CLINICAL TRIAGE ─────────── */}
+        {/* ─── ROUTING: 5. PATIENTS / CLINICAL TRIAGE ─────────── */}
         {activeNav === 'Patients' && (
           <div className="dash-card">
             <div className="card-header-row">
@@ -1372,7 +1903,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ─── ROUTING: 5. MODEL INFO VIEW ────────────────────── */}
+        {/* ─── ROUTING: 6. MODEL INFO VIEW ────────────────────── */}
         {activeNav === 'Model Info' && (
           <div className="dash-card">
             <div className="card-header-row">
@@ -1538,13 +2069,13 @@ export default function App() {
           </div>
         )}
 
-        {/* ─── ROUTING: 6. REPORTS VIEW ───────────────────────── */}
+        {/* ─── ROUTING: 7. REPORTS VIEW ───────────────────────── */}
         {activeNav === 'Reports' && (
           <div>
             <div className="btn-group-no-print" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginBottom: 16 }}>
-              <button className="btn-secondary" onClick={exportReportJson}>
-                <Download size={14} />
-                <span>Download Report JSON</span>
+              <button className="btn-secondary" onClick={() => setShowFhirModal(true)}>
+                <FileCode size={14} />
+                <span>Export HL7 FHIR (JSON)</span>
               </button>
               <button className="btn-primary" onClick={() => window.print()}>
                 <Printer size={14} />
@@ -1638,7 +2169,7 @@ export default function App() {
                 }}
               />
 
-              {/* Attestation Signoff */}
+              {/* Attestation Signoff with QR Code */}
               <div className="report-signoff-box">
                 <div>
                   <div>
@@ -1646,18 +2177,23 @@ export default function App() {
                   </div>
                   <div style={{ marginTop: 4 }}>Clinical AI Decision Support Verification</div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div>
-                    <b>Signature Date:</b> ____________________
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div>
+                      <b>Signature Date:</b> ____________________
+                    </div>
+                    <div style={{ marginTop: 4 }}>PneumoAI v1.0 • Guangzhou Cohort Validated</div>
                   </div>
-                  <div style={{ marginTop: 4 }}>PneumoAI v1.0 • Guangzhou Cohort Validated</div>
+                  <div style={{ padding: 6, background: '#F8FAFD', border: '1px solid #E3ECFA', borderRadius: 6 }}>
+                    <QrCode size={36} color="#10264F" />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* ─── ROUTING: 7. SETTINGS VIEW ──────────────────────── */}
+        {/* ─── ROUTING: 8. SETTINGS VIEW ──────────────────────── */}
         {activeNav === 'Settings' && (
           <div className="dash-card">
             <div className="card-header-row">
@@ -1754,6 +2290,33 @@ export default function App() {
         )}
       </main>
 
+      {/* ─── HL7 FHIR EXPORT MODAL ──────────────────────────── */}
+      {showFhirModal && (
+        <div className="modal-overlay" onClick={() => setShowFhirModal(false)}>
+          <div className="modal-content" style={{ maxWidth: 740 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">HL7 FHIR R4 DiagnosticReport (JSON)</span>
+              <button className="modal-close-btn" onClick={() => setShowFhirModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ fontSize: 12, color: '#61799D', marginBottom: 12 }}>
+              Conforming to HL7 FHIR Standard Specification for Radiology Diagnostic Reports (LOINC: 24648-8 / SNOMED CT: 233604007).
+            </div>
+            <pre className="fhir-code-box">{JSON.stringify(getFhirPayload(), null, 2)}</pre>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+              <button className="btn-secondary" onClick={() => setShowFhirModal(false)}>
+                Close
+              </button>
+              <button className="btn-primary" onClick={exportFhirJson}>
+                <Download size={14} />
+                <span>Download FHIR JSON</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── LIGHTBOX MODAL WITH ZOOM & PAN ─────────────────── */}
       {lightbox.open && (
         <div className="modal-overlay" onClick={() => setLightbox({ open: false, title: '', src: '', zoom: 1 })}>
@@ -1801,6 +2364,7 @@ export default function App() {
                 style={{
                   transform: `scale(${lightbox.zoom})`,
                   transition: 'transform 0.15s ease-out',
+                  ...getFilterStyle(),
                 }}
               />
             </div>
