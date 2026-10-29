@@ -85,19 +85,23 @@ async def predict(file: UploadFile = File(...)):
 
     result = predict_with_gradcam(model, image, device)
 
-    # Encode Grad-CAM image to base64
-    gradcam_bytes  = pil_to_bytes(result["gradcam_image"])
-    gradcam_b64    = base64.b64encode(gradcam_bytes).decode()
+    # Encode Grad-CAM images to base64
+    overlay_bytes  = pil_to_bytes(result["gradcam_image"])
+    overlay_b64    = base64.b64encode(overlay_bytes).decode()
+    heatmap_bytes  = pil_to_bytes(result.get("heatmap_image", result["gradcam_image"]))
+    heatmap_b64    = base64.b64encode(heatmap_bytes).decode()
     original_bytes = pil_to_bytes(image.resize((224, 224)))
     original_b64   = base64.b64encode(original_bytes).decode()
 
     return JSONResponse({
-        "class_name":    result["class_name"],
-        "class_idx":     result["class_idx"],
-        "confidence":    result["confidence"],
-        "probabilities": result["probabilities"],
-        "gradcam_image": gradcam_b64,   # base64 PNG
-        "original_image": original_b64, # base64 PNG
+        "class_name":     result["class_name"],
+        "class_idx":      result["class_idx"],
+        "confidence":     result["confidence"],
+        "probabilities":  result["probabilities"],
+        "gradcam_image":  overlay_b64,   # base64 PNG (backward-compatible)
+        "overlay_image":  overlay_b64,   # base64 PNG
+        "heatmap_image":  heatmap_b64,   # base64 PNG
+        "original_image": original_b64,  # base64 PNG
     })
 
 

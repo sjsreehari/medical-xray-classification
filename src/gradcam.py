@@ -83,6 +83,16 @@ def preprocess_image(image: Image.Image) -> torch.Tensor:
     return INFER_TRANSFORM(image).unsqueeze(0)
 
 
+def generate_heatmap(cam: np.ndarray) -> Image.Image:
+    """Generate pure Grad-CAM pseudo-color heatmap (JET colormap)."""
+    cam_resized = cv2.resize(cam, (IMAGE_SIZE, IMAGE_SIZE))
+    heatmap     = cv2.applyColorMap(
+        np.uint8(255 * cam_resized), cv2.COLORMAP_JET
+    )
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(heatmap)
+
+
 def overlay_heatmap(original_image: Image.Image, cam: np.ndarray,
                     alpha: float = 0.45) -> Image.Image:
     """Overlay Grad-CAM heatmap on the original image."""
@@ -104,7 +114,7 @@ def predict_with_gradcam(model, image: Image.Image, device=None):
     Run inference + Grad-CAM on a PIL image.
 
     Returns:
-        dict with keys: class_name, confidence, gradcam_image (PIL)
+        dict with keys: class_name, confidence, gradcam_image (PIL), heatmap_image (PIL), overlay_image (PIL)
     """
     if device is None:
         device = get_device()
@@ -127,17 +137,20 @@ def predict_with_gradcam(model, image: Image.Image, device=None):
         confidence = probs[class_idx].item()
 
     class_name  = CLASS_NAMES[class_idx]
-    gradcam_img = overlay_heatmap(image, cam)
+    heatmap_img = generate_heatmap(cam)
+    overlay_img = overlay_heatmap(image, cam)
 
     return {
-        "class_name":  class_name,
-        "class_idx":   class_idx,
-        "confidence":  round(confidence * 100, 2),
+        "class_name":    class_name,
+        "class_idx":     class_idx,
+        "confidence":    round(confidence * 100, 2),
         "probabilities": {
             CLASS_NAMES[0]: round(probs[0].item() * 100, 2),
             CLASS_NAMES[1]: round(probs[1].item() * 100, 2),
         },
-        "gradcam_image": gradcam_img,
+        "gradcam_image": overlay_img,
+        "heatmap_image": heatmap_img,
+        "overlay_image": overlay_img,
     }
 
 
